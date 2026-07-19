@@ -64,8 +64,32 @@ explicitly not deployable unless all stability checks pass.
 
 ### Core merge (3.23.18 → chore/sync-saleor-upstream-20260719)
 
-_Pending._
+Merge commit: `c78ef3103a`. Four conflicts, resolved file by file:
+
+| File | Conflict | Resolution |
+|---|---|---|
+| `.gitignore` | fork added `!.python-version`; upstream added `!.semgrep/` at same location | Union — kept both lines |
+| `saleor/settings.py` | fork added COD + HyperPay to `BUILTIN_PLUGINS`; upstream removed `NPAtobaraiGatewayPlugin` from the same region | Kept both custom registrations; accepted upstream's NP Atobarai removal (upstream also deleted the gateway package) |
+| `pyproject.toml` | whole dependency array rewritten upstream (incl. removal of Adyen, reformat to 2-space indent) | Took upstream's 3.23.18 file, re-applied fork intents: `setuptools>=78.1.1,<81` runtime dep (razorpay still imports `pkg_resources`; setuptools 81+ removed it; upstream locks 78.1.1) and `pytest-memray` guarded with `; sys_platform != 'win32'` instead of deletion so Linux CI retains it |
+| `uv.lock` | binary-level conflict | Never hand-merged: took upstream's lock, then regenerated with `uv lock` against the resolved `pyproject.toml` |
+
+Follow-up commits on the sync branch:
+
+- `b569633ab5` — removal of debug scripts + seed consolidation (see inventory)
+- `d78ace1926` — docs (this report + customization inventory)
+- `3e80df8f03` — setuptools constraint, ruff fixes/format on custom code; GraphQL
+  schema regenerated via `manage.py get_graphql_schema` — **byte-identical to
+  upstream 3.23.18** (custom plugins add no schema surface)
+
+Verification so far: `manage.py check` → 0 issues; ruff clean on custom code;
+plugins load through the plugin registry. Migrations/tests: recorded below when run.
 
 ### Dashboard merge (3.23.17 → chore/sync-dashboard-upstream-20260719)
 
-_Pending._
+Merge commit: `d46a7e154`. **Zero conflicts.** The fork's single customization
+(`vite.config.js` entry `"/index.tsx"` instead of `path.resolve(...)` — Windows
+backslash-path fix for `vite-plugin-html`) survived the merge and remains in place.
+
+`schema-main.graphql` replaced with the synchronized Core 3.23.18 schema (the
+committed copy was fetched from the moving 3.23 branch and was 38 lines ahead —
+deprecation annotations only). Codegen re-run against it (results below).

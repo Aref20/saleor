@@ -2,6 +2,7 @@
 
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from ... import TransactionKind
@@ -190,6 +191,35 @@ def capture(payment_information: PaymentData, config: GatewayConfig) -> GatewayR
     )
 
 
+def _find_amount_mismatch(
+    result: dict[str, Any], payment_information: PaymentData
+) -> str | None:
+    """Verify the gateway-reported amount/currency matches the local payment.
+
+    Guards against tampered or mixed-up gateway callbacks marking a payment as
+    paid for a different amount or currency than the checkout requested.
+    """
+    reported_amount = result.get("amount")
+    if reported_amount is not None:
+        try:
+            reported = Decimal(str(reported_amount))
+        except (ArithmeticError, ValueError):
+            return f"Unparseable amount in gateway response: {reported_amount!r}"
+        if reported != payment_information.amount:
+            return (
+                "Amount mismatch between gateway response "
+                f"({reported}) and payment ({payment_information.amount})"
+            )
+
+    reported_currency = result.get("currency")
+    if reported_currency and reported_currency != payment_information.currency:
+        return (
+            "Currency mismatch between gateway response "
+            f"({reported_currency}) and payment ({payment_information.currency})"
+        )
+    return None
+
+
 def confirm(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Confirm payment after customer completes HyperPay widget flow."""
     hp_config = get_hyperpay_config(config)
@@ -217,6 +247,24 @@ def confirm(payment_information: PaymentData, config: GatewayConfig) -> GatewayR
 
     payment_id = result.get("payment_id", checkout_id)
     is_success = result.get("success", False)
+
+    if is_success:
+        mismatch = _find_amount_mismatch(result, payment_information)
+        if mismatch:
+            return GatewayResponse(
+                is_success=False,
+                action_required=False,
+                kind=TransactionKind.CAPTURE,
+                amount=payment_information.amount,
+                currency=payment_information.currency,
+                transaction_id=payment_id,
+                error=mismatch,
+                payment_method_info=PaymentMethodInfo(
+                    type="hyperpay",
+                    brand=result.get("payment_brand", "HyperPay"),
+                    name="HyperPay",
+                ),
+            )
 
     return GatewayResponse(
         is_success=is_success,

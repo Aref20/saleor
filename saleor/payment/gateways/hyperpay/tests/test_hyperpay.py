@@ -11,6 +11,7 @@ from saleor.payment.gateways.hyperpay import (
     GatewayConfig,
     authorize,
     capture,
+    confirm,
     get_client_token,
     process_payment,
     refund,
@@ -262,3 +263,75 @@ class TestProcessPayment:
         assert response.is_success is True
         assert response.kind == TransactionKind.AUTH  # Pre-auth mode
         assert response.action_required_data["payment_type"] == "PA"  # Pre-auth
+
+
+class TestConfirm:
+    """Tests for confirm function (server-side status verification)."""
+
+    @patch("saleor.payment.gateways.hyperpay.hyperpay_api.get_payment_status")
+    def test_confirm_success(self, mock_status, gateway_config, payment_data):
+        """Test successful confirmation with matching amount and currency."""
+        payment_data.token = "checkout_123"
+        mock_status.return_value = {
+            "success": True,
+            "result_code": "000.100.110",
+            "payment_id": "pay_123",
+            "amount": "100.00",
+            "currency": "SAR",
+            "payment_brand": "VISA",
+        }
+
+        response = confirm(payment_data, gateway_config)
+
+        assert response.is_success is True
+        assert response.kind == TransactionKind.CAPTURE
+        assert response.transaction_id == "pay_123"
+        assert response.error is None
+
+    @patch("saleor.payment.gateways.hyperpay.hyperpay_api.get_payment_status")
+    def test_confirm_rejects_amount_mismatch(
+        self, mock_status, gateway_config, payment_data
+    ):
+        """A successful gateway status with a different amount must not confirm."""
+        payment_data.token = "checkout_123"
+        mock_status.return_value = {
+            "success": True,
+            "result_code": "000.100.110",
+            "payment_id": "pay_123",
+            "amount": "1.00",
+            "currency": "SAR",
+        }
+
+        response = confirm(payment_data, gateway_config)
+
+        assert response.is_success is False
+        assert "Amount mismatch" in response.error
+
+    @patch("saleor.payment.gateways.hyperpay.hyperpay_api.get_payment_status")
+    def test_confirm_rejects_currency_mismatch(
+        self, mock_status, gateway_config, payment_data
+    ):
+        """A successful gateway status in a different currency must not confirm."""
+        payment_data.token = "checkout_123"
+        mock_status.return_value = {
+            "success": True,
+            "result_code": "000.100.110",
+            "payment_id": "pay_123",
+            "amount": "100.00",
+            "currency": "USD",
+        }
+
+        response = confirm(payment_data, gateway_config)
+
+        assert response.is_success is False
+        assert "Currency mismatch" in response.error
+
+    @patch("saleor.payment.gateways.hyperpay.hyperpay_api.get_payment_status")
+    def test_confirm_no_checkout_id(self, mock_status, gateway_config, payment_data):
+        """Confirmation without a checkout ID fails without calling the API."""
+        payment_data.token = None
+
+        response = confirm(payment_data, gateway_config)
+
+        assert response.is_success is False
+        mock_status.assert_not_called()

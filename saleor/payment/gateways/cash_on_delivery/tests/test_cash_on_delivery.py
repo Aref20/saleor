@@ -4,6 +4,7 @@ import pytest
 
 from .....plugins.manager import get_plugins_manager
 from .... import ChargeStatus, TransactionKind, gateway
+from ..plugin import CashOnDeliveryGatewayPlugin
 
 
 @pytest.fixture(autouse=True)
@@ -14,52 +15,74 @@ def setup_cod_gateway(settings):
     return settings
 
 
-def test_authorize_success(payment_dummy):
+def _as_cod_payment(payment):
+    """Route a payment fixture through the COD gateway plugin."""
+    payment.gateway = CashOnDeliveryGatewayPlugin.PLUGIN_ID
+    payment.save(update_fields=["gateway"])
+    return payment
+
+
+@pytest.fixture
+def cod_payment(payment_dummy):
+    return _as_cod_payment(payment_dummy)
+
+
+@pytest.fixture
+def cod_payment_txn_preauth(payment_txn_preauth):
+    return _as_cod_payment(payment_txn_preauth)
+
+
+@pytest.fixture
+def cod_payment_txn_captured(payment_txn_captured):
+    return _as_cod_payment(payment_txn_captured)
+
+
+def test_authorize_success(cod_payment):
     txn = gateway.authorize(
-        payment=payment_dummy,
+        payment=cod_payment,
         token="COD",
         manager=get_plugins_manager(allow_replica=False),
-        channel_slug=payment_dummy.order.channel.slug,
+        channel_slug=cod_payment.order.channel.slug,
     )
     assert txn.is_success
     assert txn.kind == TransactionKind.AUTH
-    assert txn.payment == payment_dummy
-    payment_dummy.refresh_from_db()
-    assert payment_dummy.is_active
+    assert txn.payment == cod_payment
+    cod_payment.refresh_from_db()
+    assert cod_payment.is_active
 
 
-def test_void_success(payment_txn_preauth):
-    assert payment_txn_preauth.is_active
-    assert payment_txn_preauth.charge_status == ChargeStatus.NOT_CHARGED
+def test_void_success(cod_payment_txn_preauth):
+    assert cod_payment_txn_preauth.is_active
+    assert cod_payment_txn_preauth.charge_status == ChargeStatus.NOT_CHARGED
     txn = gateway.void(
-        payment=payment_txn_preauth,
+        payment=cod_payment_txn_preauth,
         manager=get_plugins_manager(allow_replica=False),
-        channel_slug=payment_txn_preauth.order.channel.slug,
+        channel_slug=cod_payment_txn_preauth.order.channel.slug,
     )
     assert txn.is_success
     assert txn.kind == TransactionKind.VOID
-    assert txn.payment == payment_txn_preauth
-    payment_txn_preauth.refresh_from_db()
-    assert not payment_txn_preauth.is_active
-    assert payment_txn_preauth.charge_status == ChargeStatus.NOT_CHARGED
+    assert txn.payment == cod_payment_txn_preauth
+    cod_payment_txn_preauth.refresh_from_db()
+    assert not cod_payment_txn_preauth.is_active
+    assert cod_payment_txn_preauth.charge_status == ChargeStatus.NOT_CHARGED
 
 
 @pytest.mark.parametrize(
     ("amount", "charge_status"),
     [("98.40", ChargeStatus.FULLY_CHARGED), (70, ChargeStatus.PARTIALLY_CHARGED)],
 )
-def test_capture_success(amount, charge_status, payment_txn_preauth):
+def test_capture_success(amount, charge_status, cod_payment_txn_preauth):
     txn = gateway.capture(
-        payment=payment_txn_preauth,
+        payment=cod_payment_txn_preauth,
         manager=get_plugins_manager(allow_replica=False),
         amount=Decimal(amount),
-        channel_slug=payment_txn_preauth.order.channel.slug,
+        channel_slug=cod_payment_txn_preauth.order.channel.slug,
     )
     assert txn.is_success
-    assert txn.payment == payment_txn_preauth
-    payment_txn_preauth.refresh_from_db()
-    assert payment_txn_preauth.charge_status == charge_status
-    assert payment_txn_preauth.is_active
+    assert txn.payment == cod_payment_txn_preauth
+    cod_payment_txn_preauth.refresh_from_db()
+    assert cod_payment_txn_preauth.charge_status == charge_status
+    assert cod_payment_txn_preauth.is_active
 
 
 @pytest.mark.parametrize(
@@ -81,9 +104,9 @@ def test_refund_success(
     final_captured_amount,
     final_charge_status,
     active_after,
-    payment_txn_captured,
+    cod_payment_txn_captured,
 ):
-    payment = payment_txn_captured
+    payment = cod_payment_txn_captured
     payment.charge_status = ChargeStatus.FULLY_CHARGED
     payment.captured_amount = initial_captured_amount
     payment.save()
