@@ -5,13 +5,12 @@ from unittest.mock import patch
 
 import pytest
 
-from saleor.payment import ChargeStatus, TransactionKind
+from saleor.payment import TransactionKind
 from saleor.payment.gateways.hyperpay import (
     GATEWAY_NAME,
     GatewayConfig,
     authorize,
     capture,
-    confirm,
     get_client_token,
     process_payment,
     refund,
@@ -219,7 +218,9 @@ class TestProcessPayment:
     """Tests for process_payment function."""
 
     @patch("saleor.payment.gateways.hyperpay.hyperpay_api.prepare_checkout")
-    def test_process_payment_auto_capture(self, mock_prepare, gateway_config, payment_data):
+    def test_process_payment_auto_capture(
+        self, mock_prepare, gateway_config, payment_data
+    ):
         """Test process_payment with auto capture enabled."""
         mock_prepare.return_value = {
             "checkout_id": "checkout_auto_123",

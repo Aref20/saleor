@@ -12,8 +12,6 @@ from .consts import (
     CHECKOUT_PATH,
     PAYMENT_STATUS_PATH,
     PAYMENT_TYPE_CAPTURE,
-    PAYMENT_TYPE_DEBIT,
-    PAYMENT_TYPE_PREAUTH,
     PAYMENT_TYPE_REFUND,
     PAYMENT_TYPE_REVERSAL,
     PRODUCTION_API_URL,
@@ -50,8 +48,7 @@ def prepare_checkout(
     billing_address: dict | None = None,
     shipping_address: dict | None = None,
 ) -> dict[str, Any]:
-    """
-    Create a checkout session with HyperPay.
+    """Create a checkout session with HyperPay.
 
     This generates a checkout ID that can be used with the payment widget
     or for server-to-server transactions.
@@ -71,6 +68,7 @@ def prepare_checkout(
 
     Returns:
         dict with 'checkout_id' on success, or 'error' on failure
+
     """
     api_url = get_api_url(test_mode)
     endpoint = f"{api_url}{CHECKOUT_PATH}"
@@ -138,16 +136,15 @@ def prepare_checkout(
                 "result_code": result_code,
                 "result_description": result_description,
             }
-        else:
-            logger.error(
-                "HyperPay checkout creation failed: %s - %s",
-                result_code,
-                result_description,
-            )
-            return {
-                "error": result_description or "Failed to create checkout",
-                "result_code": result_code,
-            }
+        logger.error(
+            "HyperPay checkout creation failed: %s - %s",
+            result_code,
+            result_description,
+        )
+        return {
+            "error": result_description or "Failed to create checkout",
+            "result_code": result_code,
+        }
 
     except requests.exceptions.RequestException as e:
         logger.exception("HyperPay API request failed")
@@ -160,8 +157,7 @@ def get_payment_status(
     access_token: str,
     test_mode: bool = True,
 ) -> dict[str, Any]:
-    """
-    Get the payment status for a checkout.
+    """Get the payment status for a checkout.
 
     Args:
         checkout_id: The checkout ID from prepare_checkout
@@ -171,6 +167,7 @@ def get_payment_status(
 
     Returns:
         dict with payment status information
+
     """
     api_url = get_api_url(test_mode)
     endpoint = f"{api_url}{PAYMENT_STATUS_PATH.format(checkout_id=checkout_id)}"
@@ -216,8 +213,7 @@ def capture_payment(
     currency: str,
     test_mode: bool = True,
 ) -> dict[str, Any]:
-    """
-    Capture a pre-authorized payment.
+    """Capture a pre-authorized payment.
 
     Args:
         payment_id: The payment ID from the original authorization
@@ -229,6 +225,7 @@ def capture_payment(
 
     Returns:
         dict with capture result
+
     """
     api_url = get_api_url(test_mode)
     endpoint = f"{api_url}{BACKOFFICE_PATH}/{payment_id}"
@@ -277,8 +274,7 @@ def refund_payment(
     currency: str,
     test_mode: bool = True,
 ) -> dict[str, Any]:
-    """
-    Refund a payment.
+    """Refund a payment.
 
     Args:
         payment_id: The payment ID to refund
@@ -290,6 +286,7 @@ def refund_payment(
 
     Returns:
         dict with refund result
+
     """
     api_url = get_api_url(test_mode)
     endpoint = f"{api_url}{BACKOFFICE_PATH}/{payment_id}"
@@ -336,8 +333,7 @@ def void_payment(
     access_token: str,
     test_mode: bool = True,
 ) -> dict[str, Any]:
-    """
-    Void/reverse a payment.
+    """Void/reverse a payment.
 
     Args:
         payment_id: The payment ID to void
@@ -347,6 +343,7 @@ def void_payment(
 
     Returns:
         dict with void result
+
     """
     api_url = get_api_url(test_mode)
     endpoint = f"{api_url}{BACKOFFICE_PATH}/{payment_id}"

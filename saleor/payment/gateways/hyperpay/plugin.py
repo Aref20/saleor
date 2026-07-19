@@ -174,7 +174,10 @@ class HyperPayGatewayPlugin(BasePlugin):
             return previous_value
         return [
             {"field": "store_customer_card", "value": False},
-            {"field": "test_mode", "value": self.config.connection_params.get("test_mode", True)},
+            {
+                "field": "test_mode",
+                "value": self.config.connection_params.get("test_mode", True),
+            },
         ]
 
     def token_is_required_as_payment_input(self, previous_value):

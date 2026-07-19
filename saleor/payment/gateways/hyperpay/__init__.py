@@ -2,10 +2,9 @@
 
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any
 
-from ... import ChargeStatus, TransactionKind
+from ... import TransactionKind
 from ...interface import GatewayConfig, GatewayResponse, PaymentData, PaymentMethodInfo
 from . import hyperpay_api
 from .consts import (
@@ -14,7 +13,6 @@ from .consts import (
     PAYMENT_TYPE_DEBIT,
     PAYMENT_TYPE_PREAUTH,
 )
-
 
 GATEWAY_NAME = "HyperPay"
 
@@ -147,9 +145,7 @@ def authorize(
     )
 
 
-def capture(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def capture(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Capture a previously authorized payment."""
     hp_config = get_hyperpay_config(config)
 
@@ -183,7 +179,9 @@ def capture(
         amount=payment_information.amount,
         currency=payment_information.currency,
         transaction_id=result.get("transaction_id", payment_id),
-        error=result.get("error") or result.get("result_description") if not result.get("success") else None,
+        error=result.get("error") or result.get("result_description")
+        if not result.get("success")
+        else None,
         payment_method_info=PaymentMethodInfo(
             type="hyperpay",
             brand="HyperPay",
@@ -192,9 +190,7 @@ def capture(
     )
 
 
-def confirm(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def confirm(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Confirm payment after customer completes HyperPay widget flow."""
     hp_config = get_hyperpay_config(config)
 
@@ -229,7 +225,9 @@ def confirm(
         amount=payment_information.amount,
         currency=payment_information.currency,
         transaction_id=payment_id,
-        error=result.get("error") or result.get("result_description") if not is_success else None,
+        error=result.get("error") or result.get("result_description")
+        if not is_success
+        else None,
         payment_method_info=PaymentMethodInfo(
             type="hyperpay",
             brand=result.get("payment_brand", "HyperPay"),
@@ -238,9 +236,7 @@ def confirm(
     )
 
 
-def void(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def void(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Void/reverse a HyperPay payment."""
     hp_config = get_hyperpay_config(config)
 
@@ -271,7 +267,9 @@ def void(
         amount=payment_information.amount,
         currency=payment_information.currency,
         transaction_id=result.get("transaction_id", payment_id),
-        error=result.get("error") or result.get("result_description") if not result.get("success") else None,
+        error=result.get("error") or result.get("result_description")
+        if not result.get("success")
+        else None,
         payment_method_info=PaymentMethodInfo(
             type="hyperpay",
             brand="HyperPay",
@@ -280,9 +278,7 @@ def void(
     )
 
 
-def refund(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def refund(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Refund a HyperPay payment."""
     hp_config = get_hyperpay_config(config)
 
@@ -315,7 +311,9 @@ def refund(
         amount=payment_information.amount,
         currency=payment_information.currency,
         transaction_id=result.get("transaction_id", payment_id),
-        error=result.get("error") or result.get("result_description") if not result.get("success") else None,
+        error=result.get("error") or result.get("result_description")
+        if not result.get("success")
+        else None,
         payment_method_info=PaymentMethodInfo(
             type="hyperpay",
             brand="HyperPay",
@@ -336,7 +334,9 @@ def process_payment(
     hp_config = get_hyperpay_config(config)
 
     merchant_transaction_id = payment_information.token or get_client_token()
-    payment_type = PAYMENT_TYPE_DEBIT if hp_config.auto_capture else PAYMENT_TYPE_PREAUTH
+    payment_type = (
+        PAYMENT_TYPE_DEBIT if hp_config.auto_capture else PAYMENT_TYPE_PREAUTH
+    )
 
     result = hyperpay_api.prepare_checkout(
         entity_id=hp_config.entity_id,
@@ -356,7 +356,9 @@ def process_payment(
         return GatewayResponse(
             is_success=False,
             action_required=False,
-            kind=TransactionKind.CAPTURE if hp_config.auto_capture else TransactionKind.AUTH,
+            kind=TransactionKind.CAPTURE
+            if hp_config.auto_capture
+            else TransactionKind.AUTH,
             amount=payment_information.amount,
             currency=payment_information.currency,
             transaction_id=merchant_transaction_id,
@@ -373,7 +375,9 @@ def process_payment(
     return GatewayResponse(
         is_success=True,
         action_required=True,  # Customer needs to complete payment via HyperPay widget
-        kind=TransactionKind.CAPTURE if hp_config.auto_capture else TransactionKind.AUTH,
+        kind=TransactionKind.CAPTURE
+        if hp_config.auto_capture
+        else TransactionKind.AUTH,
         amount=payment_information.amount,
         currency=payment_information.currency,
         transaction_id=checkout_id or merchant_transaction_id,

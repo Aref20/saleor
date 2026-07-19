@@ -62,7 +62,9 @@ class CashOnDeliveryGatewayPlugin(BasePlugin):
         self.config = GatewayConfig(
             gateway_name=GATEWAY_NAME,
             auto_capture=configuration.get("Automatic payment capture", False),
-            supported_currencies=configuration.get("Supported currencies", "USD, EUR, AED"),
+            supported_currencies=configuration.get(
+                "Supported currencies", "USD, EUR, AED"
+            ),
             connection_params={},
             store_customer=False,
         )

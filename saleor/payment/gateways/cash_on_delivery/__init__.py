@@ -1,8 +1,7 @@
 import uuid
 
-from ... import ChargeStatus, TransactionKind
+from ... import TransactionKind
 from ...interface import GatewayConfig, GatewayResponse, PaymentData, PaymentMethodInfo
-
 
 GATEWAY_NAME = "Cash on Delivery"
 
@@ -38,9 +37,7 @@ def authorize(
     )
 
 
-def capture(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def capture(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Capture payment for Cash on Delivery.
 
     This is called when the order is marked as delivered/paid.
@@ -61,9 +58,7 @@ def capture(
     )
 
 
-def confirm(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def confirm(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Confirm payment for Cash on Delivery."""
     return GatewayResponse(
         is_success=True,
@@ -76,9 +71,7 @@ def confirm(
     )
 
 
-def void(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def void(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Void (cancel) a Cash on Delivery payment."""
     return GatewayResponse(
         is_success=True,
@@ -91,9 +84,7 @@ def void(
     )
 
 
-def refund(
-    payment_information: PaymentData, config: GatewayConfig
-) -> GatewayResponse:
+def refund(payment_information: PaymentData, config: GatewayConfig) -> GatewayResponse:
     """Refund a Cash on Delivery payment."""
     return GatewayResponse(
         is_success=True,

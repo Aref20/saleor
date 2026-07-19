@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from .....plugins.manager import get_plugins_manager
-from .... import ChargeStatus, PaymentError, TransactionKind, gateway
+from .... import ChargeStatus, TransactionKind, gateway
 
 
 @pytest.fixture(autouse=True)

@@ -1,3 +1,4 @@
+# ruff: noqa: T201
 """Idempotent development-data seeder for the Fresh Finds storefront.
 
 Creates a minimal demo catalog (categories, product type, products with variants,
