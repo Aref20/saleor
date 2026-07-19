@@ -84,6 +84,47 @@ Follow-up commits on the sync branch:
 Verification so far: `manage.py check` → 0 issues; ruff clean on custom code;
 plugins load through the plugin registry. Migrations/tests: recorded below when run.
 
+## Verification results (2026-07-19)
+
+### Core (`chore/sync-saleor-upstream-20260719`)
+
+| Check | Result |
+|---|---|
+| `manage.py check` | 0 issues |
+| `manage.py migrate` (fresh Postgres 15, disposable container) | all migrations incl. 3.23 data-migration tasks — OK |
+| `manage.py makemigrations --check --dry-run` | "No changes detected" — no lost/missing migrations |
+| GraphQL schema regeneration | byte-identical to upstream 3.23.18 |
+| ruff check custom code | 0 errors (after fixes) |
+| Gateway tests (COD + HyperPay) | **21/21 passed** |
+| `saleor/payment/tests/test_gateway.py` + `test_gateways_utils.py` | 13 passed in xdist run; 28 fixture-setup errors traced to stale reused test DBs — representative failing test passes on `--create-db` (fresh DB) |
+| `collectstatic` | 274 files OK |
+| Live server (uvicorn + Postgres) | boots; full GraphQL gate below |
+
+### Dashboard (`chore/sync-dashboard-upstream-20260719`)
+
+| Check | Result |
+|---|---|
+| `pnpm install --frozen-lockfile` | OK |
+| `pnpm generate` (codegen vs synchronized Core schema) | OK, small expected diff |
+| `pnpm check-types` (tsc + tsc-strict, scripts, playwright) | PASS |
+| `jest --ci` | **4,449 passed, 0 failed**, 8 skipped (one suite-level flake in an earlier run under parallel build load; clean JSON-reported rerun: 0 failed suites) |
+| `pnpm build` (production vite build) | ✓ built in 4m 21s (chunk-size warnings only) |
+
+### Live GraphQL completion gate (Core 3.23.18, seeded dev DB)
+
+All **14/14** checks passed: staff `tokenCreate`; `shop.version` = 3.23.18; channels;
+products in channel; `productCreate`; `checkoutCreate`; `availablePaymentGateways`
+lists **Cash on Delivery** and **HyperPay**; shipping zone/method configuration via
+staff API; shipping address; delivery method; billing address; COD
+`checkoutPaymentCreate`; `checkoutComplete` → **order #1 created,
+UNFULFILLED / NOT_CHARGED** (correct COD semantics — capture is a staff action on
+delivery).
+
+HyperPay live sandbox initialization requires real HyperPay test credentials
+(Entity ID + Access Token) which are not present in the repository (by design).
+This is an **external blocker** for end-to-end sandbox verification; the plugin's
+request/response handling is covered by its unit tests.
+
 ### Dashboard merge (3.23.17 → chore/sync-dashboard-upstream-20260719)
 
 Merge commit: `d46a7e154`. **Zero conflicts.** The fork's single customization
