@@ -75,8 +75,6 @@ COST_MAP = {
         "collection": {"complexity": 1},
         "collections": {"complexity": 1, "multipliers": ["first", "last"]},
         "customers": {"complexity": 1, "multipliers": ["first", "last"]},
-        "digitalContent": {"complexity": 1},
-        "digitalContents": {"complexity": 1, "multipliers": ["first", "last"]},
         "draftOrders": {"complexity": 1, "multipliers": ["first", "last"]},
         "exportFile": {"complexity": 1},
         "exportFiles": {"complexity": 1, "multipliers": ["first", "last"]},
@@ -138,6 +136,7 @@ COST_MAP = {
     },
     "App": {
         "extensions": {"complexity": 1},
+        "problems": {"complexity": 1, "multipliers": ["limit"]},
         "tokens": {"complexity": 1},
         "webhooks": {"complexity": 1},
     },

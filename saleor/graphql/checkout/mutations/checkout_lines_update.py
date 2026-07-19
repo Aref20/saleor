@@ -134,6 +134,7 @@ class CheckoutLinesUpdate(CheckoutLinesAdd):
             existing_lines=lines,
             replace=True,
             check_reservations=is_reservation_enabled(site.settings),
+            calculate_stocks_with_shipping_zones=site.settings.use_legacy_shipping_zone_stock_availability,
         )
 
     @classmethod
@@ -231,6 +232,12 @@ class CheckoutLinesUpdate(CheckoutLinesAdd):
             token=token,
             id=id,
         )
+
+    @classmethod
+    def mark_search_vectors_as_dirty(cls, checkout, update_fields):
+        # As any changes applied with `CheckoutLinesUpdate` do not influence the
+        # checkout search vector, we don't mark it as dirty.
+        pass
 
     @classmethod
     def _get_variants_from_lines_input(cls, lines: list[dict]) -> list[ProductVariant]:

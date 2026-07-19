@@ -99,9 +99,19 @@ def to_enum(enum_cls, *, type_name=None, **options) -> graphene.Enum:
     return graphene.Enum(type_name, enum_data, **options)
 
 
+def __language_code_enum_description(enum):
+    if not enum:
+        return "Language code enum. It contains all the languages supported by Saleor."
+    for code, name in settings.LANGUAGES:
+        if enum.value == code:
+            return name
+    return None
+
+
 LanguageCodeEnum = graphene.Enum(
     "LanguageCodeEnum",
     [(lang[0].replace("-", "_").upper(), lang[0]) for lang in settings.LANGUAGES],
+    description=__language_code_enum_description,
 )
 
 
@@ -256,6 +266,11 @@ RefundSettingsErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
 )
 RefundSettingsErrorCode.doc_category = DOC_CATEGORY_SHOP
 
+ReturnSettingsErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
+    site_error_codes.ReturnSettingsErrorCode
+)
+ReturnSettingsErrorCode.doc_category = DOC_CATEGORY_SHOP
+
 MetadataErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
     core_error_codes.MetadataErrorCode
 )
@@ -390,8 +405,19 @@ ProductVariantBulkErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
 )
 ProductVariantBulkErrorCode.doc_category = DOC_CATEGORY_PRODUCTS
 
+
+def collection_error_deprecation_reason(enum):
+    if enum == CollectionErrorCode.CANNOT_MANAGE_PRODUCT_WITHOUT_VARIANT:
+        return (
+            "Products without variants can now be assigned to collections. "
+            "This error will never be returned."
+        )
+    return None
+
+
 CollectionErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
-    product_error_codes.CollectionErrorCode
+    product_error_codes.CollectionErrorCode,
+    deprecation_reason=collection_error_deprecation_reason,
 )
 CollectionErrorCode.doc_category = DOC_CATEGORY_PRODUCTS
 
@@ -408,6 +434,11 @@ ShippingErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
     shipping_error_codes.ShippingErrorCode
 )
 ShippingErrorCode.doc_category = DOC_CATEGORY_SHIPPING
+
+DeliveryOptionsCalculateErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
+    shipping_error_codes.DeliveryOptionsCalculateErrorCode
+)
+DeliveryOptionsCalculateErrorCode.doc_category = DOC_CATEGORY_SHIPPING
 
 StockErrorCode: Final[graphene.Enum] = graphene.Enum.from_enum(
     warehouse_error_codes.StockErrorCode

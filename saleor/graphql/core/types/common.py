@@ -39,6 +39,7 @@ from ..enums import (
     CheckoutErrorCode,
     CollectionErrorCode,
     CustomerBulkUpdateErrorCode,
+    DeliveryOptionsCalculateErrorCode,
     DiscountErrorCode,
     ExportErrorCode,
     ExternalNotificationTriggerErrorCode,
@@ -69,6 +70,7 @@ from ..enums import (
     ProductVariantBulkErrorCode,
     ProductVariantTranslateErrorCode,
     RefundSettingsErrorCode,
+    ReturnSettingsErrorCode,
     SendConfirmationEmailErrorCode,
     ShippingErrorCode,
     ShopErrorCode,
@@ -371,6 +373,24 @@ class RefundReasonReferenceTypeClearError(Error):
         doc_category = DOC_CATEGORY_SHOP
 
 
+class ReturnSettingsUpdateError(Error):
+    code = ReturnSettingsErrorCode(
+        description="Failed to update Return Settings", required=True
+    )
+
+    class Meta:
+        doc_category = DOC_CATEGORY_SHOP
+
+
+class ReturnReasonReferenceTypeClearError(Error):
+    code = ReturnSettingsErrorCode(
+        description="Failed to clear return reason reference type", required=True
+    )
+
+    class Meta:
+        doc_category = DOC_CATEGORY_SHOP
+
+
 class MetadataError(Error):
     code = MetadataErrorCode(description="The error code.", required=True)
 
@@ -608,6 +628,15 @@ class ShippingError(Error):
         graphene.ID,
         description="List of channels IDs which causes the error.",
         required=False,
+    )
+
+    class Meta:
+        doc_category = DOC_CATEGORY_SHIPPING
+
+
+class DeliveryOptionsCalculateError(Error):
+    code = DeliveryOptionsCalculateErrorCode(
+        description="The error code.", required=True
     )
 
     class Meta:

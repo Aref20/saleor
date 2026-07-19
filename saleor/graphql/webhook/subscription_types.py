@@ -1,6 +1,10 @@
+from typing import TYPE_CHECKING
+
 import graphene
 from django.conf import settings
 from graphene import AbstractType, Union
+from prices import Money
+from promise import Promise
 from rx import Observable
 
 from ... import __version__
@@ -37,6 +41,7 @@ from ...webhook.const import MAX_FILTERABLE_CHANNEL_SLUGS_LIMIT
 from ...webhook.event_types import WebhookEventAsyncType, WebhookEventSyncType
 from ..account.types import User as UserType
 from ..app.types import App as AppType
+from ..channel.dataloaders.by_self import ChannelBySlugLoader
 from ..channel.enums import TransactionFlowStrategyEnum
 from ..core import ResolveInfo
 from ..core.context import (
@@ -49,6 +54,8 @@ from ..core.descriptions import (
     ADDED_IN_319,
     ADDED_IN_320,
     ADDED_IN_321,
+    ADDED_IN_322,
+    ADDED_IN_323,
     DEPRECATED_IN_3X_EVENT,
     PREVIEW_FEATURE,
 )
@@ -76,6 +83,11 @@ from ..product.dataloaders import ProductVariantByIdLoader
 from ..shipping.types import ShippingMethod
 from ..translations import types as translation_types
 from ..warehouse.dataloaders import WarehouseByIdLoader
+
+if TYPE_CHECKING:
+    from ...channel.models import Channel
+    from ...product.interface import VariantDiscountedPriceChange
+    from ...warehouse.interface import VariantChannelStockInfo
 
 TRANSLATIONS_TYPES_MAP = {
     ProductTranslation: translation_types.ProductTranslation,
@@ -173,8 +185,13 @@ class AccountOperationBase(AbstractType):
     @staticmethod
     def resolve_channel(root, info: ResolveInfo):
         _, data = root
-        return Channel.objects.using(get_database_connection_name(info.context)).get(
-            slug=data["channel_slug"]
+        channel_slug = data.get("channel_slug")
+        if not channel_slug:
+            return None
+        return (
+            Channel.objects.using(get_database_connection_name(info.context))
+            .filter(slug=channel_slug)
+            .first()
         )
 
     @staticmethod
@@ -1043,6 +1060,175 @@ class ProductVariantStockUpdated(SubscriptionObjectType, ProductVariantBase):
         return WarehouseByIdLoader(info.context).load(stock.warehouse_id)
 
 
+class ProductVariantDiscountedPriceUpdated(SubscriptionObjectType):
+    product_variant = graphene.Field(
+        "saleor.graphql.product.types.ProductVariant",
+        description="The product variant the event relates to.",
+        required=True,
+    )
+    channel = graphene.Field(
+        "saleor.graphql.channel.types.Channel",
+        description="The channel where the price changed.",
+        required=True,
+    )
+    previous_price = graphene.Field(
+        "saleor.graphql.core.types.money.Money",
+        description="The previous discounted price.",
+        required=True,
+    )
+    new_price = graphene.Field(
+        "saleor.graphql.core.types.money.Money",
+        description="The new discounted price.",
+        required=True,
+    )
+
+    class Meta:
+        root_type = None
+        enable_dry_run = False
+        interfaces = (Event,)
+        description = (
+            "Event sent when product variant discounted price is recalculated."
+            + ADDED_IN_322
+        )
+        doc_category = DOC_CATEGORY_PRODUCTS
+
+    @staticmethod
+    def resolve_product_variant(
+        root: tuple[str, "VariantDiscountedPriceChange"],
+        info: ResolveInfo,
+    ) -> Promise["ChannelContext"]:
+        _, price_info = root
+        channel_slug = price_info.channel_slug
+        return (
+            ProductVariantByIdLoader(info.context)
+            .load(price_info.variant_id)
+            .then(
+                lambda variant: ChannelContext(node=variant, channel_slug=channel_slug)
+            )
+        )
+
+    @staticmethod
+    def resolve_channel(
+        root: tuple[str, "VariantDiscountedPriceChange"],
+        info: ResolveInfo,
+    ) -> Promise["Channel"]:
+        _, price_info = root
+        return ChannelBySlugLoader(info.context).load(price_info.channel_slug)
+
+    @staticmethod
+    def resolve_previous_price(
+        root: tuple[str, "VariantDiscountedPriceChange"],
+        _info: ResolveInfo,
+    ) -> Money:
+        _, price_info = root
+        return Money(
+            amount=price_info.previous_price_amount, currency=price_info.currency
+        )
+
+    @staticmethod
+    def resolve_new_price(
+        root: tuple[str, "VariantDiscountedPriceChange"],
+        _info: ResolveInfo,
+    ) -> Money:
+        _, price_info = root
+        return Money(amount=price_info.new_price_amount, currency=price_info.currency)
+
+
+class ProductVariantChannelStockBase(SubscriptionObjectType):
+    product_variant = graphene.Field(
+        "saleor.graphql.product.types.ProductVariant",
+        description="The product variant the event relates to.",
+        required=True,
+    )
+    channel = graphene.Field(
+        "saleor.graphql.channel.types.Channel",
+        description="The channel the stock availability changed in.",
+        required=True,
+    )
+
+    class Meta:
+        abstract = True
+
+    @staticmethod
+    def resolve_product_variant(
+        root: tuple[str, "VariantChannelStockInfo"],
+        info: ResolveInfo,
+    ) -> Promise["ChannelContext"]:
+        _, stock_info = root
+        channel_slug = stock_info.channel_slug
+        return (
+            ProductVariantByIdLoader(info.context)
+            .load(stock_info.variant_id)
+            .then(
+                lambda variant: ChannelContext(node=variant, channel_slug=channel_slug)
+            )
+        )
+
+    @staticmethod
+    def resolve_channel(
+        root: tuple[str, "VariantChannelStockInfo"],
+        info: ResolveInfo,
+    ) -> Promise["Channel"]:
+        _, stock_info = root
+        return ChannelBySlugLoader(info.context).load(stock_info.channel_slug)
+
+
+class ProductVariantOutOfStockInChannel(ProductVariantChannelStockBase):
+    class Meta:
+        root_type = None
+        enable_dry_run = False
+        interfaces = (Event,)
+        description = (
+            "Event sent when a product variant becomes out of stock across all "
+            "non click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323
+        )
+        doc_category = DOC_CATEGORY_PRODUCTS
+
+
+class ProductVariantBackInStockInChannel(ProductVariantChannelStockBase):
+    class Meta:
+        root_type = None
+        enable_dry_run = False
+        interfaces = (Event,)
+        description = (
+            "Event sent when a product variant becomes available again across "
+            "non click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323
+        )
+        doc_category = DOC_CATEGORY_PRODUCTS
+
+
+class ProductVariantOutOfStockForClickAndCollect(ProductVariantChannelStockBase):
+    class Meta:
+        root_type = None
+        enable_dry_run = False
+        interfaces = (Event,)
+        description = (
+            "Event sent when a product variant becomes out of stock across all "
+            "click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323
+        )
+        doc_category = DOC_CATEGORY_PRODUCTS
+
+
+class ProductVariantBackInStockForClickAndCollect(ProductVariantChannelStockBase):
+    class Meta:
+        root_type = None
+        enable_dry_run = False
+        interfaces = (Event,)
+        description = (
+            "Event sent when a product variant becomes available again across "
+            "click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323
+        )
+        doc_category = DOC_CATEGORY_PRODUCTS
+
+
 class ProductExportCompleted(SubscriptionObjectType):
     export = graphene.Field(
         "saleor.graphql.csv.types.ExportFile",
@@ -1418,6 +1604,14 @@ class CustomerMetadataUpdated(SubscriptionObjectType, UserBase):
         enable_dry_run = True
         interfaces = (Event,)
         description = "Event sent when customer user metadata is updated."
+
+
+class CustomerDeleted(SubscriptionObjectType, UserBase):
+    class Meta:
+        root_type = "User"
+        enable_dry_run = True
+        interfaces = (Event,)
+        description = "Event sent when customer user is deleted." + ADDED_IN_323
 
 
 class CollectionBase(AbstractType):
@@ -2468,9 +2662,10 @@ class PaymentListGateways(SubscriptionObjectType, CheckoutBase):
 
 
 class ShippingListMethodsForCheckout(SubscriptionObjectType, CheckoutBase):
-    shipping_methods = NonNullList(
-        ShippingMethod,
+    shipping_methods = BaseField(
+        NonNullList(ShippingMethod),
         description="Shipping methods that can be used with this checkout.",
+        monitor_usage=True,
     )
 
     @staticmethod
@@ -2818,6 +3013,65 @@ class Subscription(SubscriptionObjectType):
         channels=channels_argument,
         doc_category=DOC_CATEGORY_CHECKOUT,
     )
+    product_variant_discounted_price_updated = BaseField(
+        ProductVariantDiscountedPriceUpdated,
+        description=(
+            "Event sent when product variant discounted price is recalculated."
+            + ADDED_IN_322
+            + PREVIEW_FEATURE
+        ),
+        resolver=default_channel_filterable_resolver,
+        channels=channels_argument,
+        doc_category=DOC_CATEGORY_PRODUCTS,
+    )
+    product_variant_out_of_stock_in_channel = BaseField(
+        ProductVariantOutOfStockInChannel,
+        description=(
+            "Event sent when a product variant becomes out of stock across all "
+            "non click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323 + PREVIEW_FEATURE
+        ),
+        resolver=default_channel_filterable_resolver,
+        channels=channels_argument,
+        doc_category=DOC_CATEGORY_PRODUCTS,
+    )
+    product_variant_back_in_stock_in_channel = BaseField(
+        ProductVariantBackInStockInChannel,
+        description=(
+            "Event sent when a product variant becomes available again across "
+            "non click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323 + PREVIEW_FEATURE
+        ),
+        resolver=default_channel_filterable_resolver,
+        channels=channels_argument,
+        doc_category=DOC_CATEGORY_PRODUCTS,
+    )
+    product_variant_out_of_stock_for_click_and_collect = BaseField(
+        ProductVariantOutOfStockForClickAndCollect,
+        description=(
+            "Event sent when a product variant becomes out of stock across all "
+            "click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323 + PREVIEW_FEATURE
+        ),
+        resolver=default_channel_filterable_resolver,
+        channels=channels_argument,
+        doc_category=DOC_CATEGORY_PRODUCTS,
+    )
+    product_variant_back_in_stock_for_click_and_collect = BaseField(
+        ProductVariantBackInStockForClickAndCollect,
+        description=(
+            "Event sent when a product variant becomes available again across "
+            "click-and-collect warehouses in a channel."
+            "\n\nNote: Only triggered when the `useLegacyShippingZoneStockAvailability` "
+            "shop setting is disabled." + ADDED_IN_323 + PREVIEW_FEATURE
+        ),
+        resolver=default_channel_filterable_resolver,
+        channels=channels_argument,
+        doc_category=DOC_CATEGORY_PRODUCTS,
+    )
 
     class Meta:
         doc_category = DOC_CATEGORY_MISC
@@ -2998,6 +3252,11 @@ ASYNC_WEBHOOK_TYPES_MAP = {
     WebhookEventAsyncType.PRODUCT_VARIANT_OUT_OF_STOCK: ProductVariantOutOfStock,
     WebhookEventAsyncType.PRODUCT_VARIANT_BACK_IN_STOCK: ProductVariantBackInStock,
     WebhookEventAsyncType.PRODUCT_VARIANT_STOCK_UPDATED: ProductVariantStockUpdated,
+    WebhookEventAsyncType.PRODUCT_VARIANT_DISCOUNTED_PRICE_UPDATED: ProductVariantDiscountedPriceUpdated,
+    WebhookEventAsyncType.PRODUCT_VARIANT_OUT_OF_STOCK_IN_CHANNEL: ProductVariantOutOfStockInChannel,
+    WebhookEventAsyncType.PRODUCT_VARIANT_BACK_IN_STOCK_IN_CHANNEL: ProductVariantBackInStockInChannel,
+    WebhookEventAsyncType.PRODUCT_VARIANT_OUT_OF_STOCK_FOR_CLICK_AND_COLLECT: ProductVariantOutOfStockForClickAndCollect,
+    WebhookEventAsyncType.PRODUCT_VARIANT_BACK_IN_STOCK_FOR_CLICK_AND_COLLECT: ProductVariantBackInStockForClickAndCollect,
     WebhookEventAsyncType.PRODUCT_VARIANT_DELETED: ProductVariantDeleted,
     WebhookEventAsyncType.PRODUCT_VARIANT_METADATA_UPDATED: (
         ProductVariantMetadataUpdated
@@ -3024,6 +3283,7 @@ ASYNC_WEBHOOK_TYPES_MAP = {
     WebhookEventAsyncType.FULFILLMENT_METADATA_UPDATED: FulfillmentMetadataUpdated,
     WebhookEventAsyncType.CUSTOMER_CREATED: CustomerCreated,
     WebhookEventAsyncType.CUSTOMER_UPDATED: CustomerUpdated,
+    WebhookEventAsyncType.CUSTOMER_DELETED: CustomerDeleted,
     WebhookEventAsyncType.CUSTOMER_METADATA_UPDATED: CustomerMetadataUpdated,
     WebhookEventAsyncType.COLLECTION_CREATED: CollectionCreated,
     WebhookEventAsyncType.COLLECTION_UPDATED: CollectionUpdated,

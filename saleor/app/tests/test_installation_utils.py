@@ -26,7 +26,6 @@ from ..installation_utils import (
     validate_app_install_response,
 )
 from ..models import App
-from ..types import DeprecatedAppExtensionMount, DeprecatedAppExtensionTarget
 
 
 def test_validate_app_install_response():
@@ -217,7 +216,7 @@ def test_install_app_with_brand_data(app_manifest, app_installation, monkeypatch
 
 
 @freeze_time("2022-05-12 12:00:00")
-@patch("saleor.plugins.webhook.plugin.get_webhooks_for_event")
+@patch("saleor.plugins.webhook.plugin.get_webhooks_for_app_lifecycle_event")
 @patch("saleor.plugins.webhook.plugin.trigger_webhooks_async")
 def test_install_app_created_app_trigger_webhook(
     mocked_webhook_trigger,
@@ -304,8 +303,8 @@ def test_install_app_with_extension(
 
     assert app_extension.label == label
     assert app_extension.url == url
-    assert app_extension.mount == DeprecatedAppExtensionMount.PRODUCT_OVERVIEW_CREATE
-    assert app_extension.target == DeprecatedAppExtensionTarget.POPUP
+    assert app_extension.mount == "product_overview_create"
+    assert app_extension.target == "popup"
     assert list(app_extension.permissions.all()) == [permission_manage_products]
     assert app_extension.http_target_method is None
 
@@ -352,8 +351,8 @@ def test_install_app_with_extension_widget(
 
     assert app_extension.label == label
     assert app_extension.url == url
-    assert app_extension.mount == DeprecatedAppExtensionMount.PRODUCT_DETAILS_WIDGETS
-    assert app_extension.target == DeprecatedAppExtensionTarget.WIDGET
+    assert app_extension.mount == "product_details_widgets"
+    assert app_extension.target == "widget"
     assert list(app_extension.permissions.all()) == [permission_manage_products]
     assert app_extension.http_target_method == "POST"
 
@@ -433,7 +432,7 @@ def test_install_app_with_extension_new_tab_target(
     app_extension = app.extensions.get()
     assert app_extension.label == label
     assert app_extension.url == url
-    assert app_extension.mount == DeprecatedAppExtensionMount.PRODUCT_OVERVIEW_CREATE
+    assert app_extension.mount == "product_overview_create"
     assert app_extension.target == "new_tab"
     assert list(app_extension.permissions.all()) == [permission_manage_products]
     assert app_extension.http_target_method == "GET"
@@ -585,8 +584,8 @@ def test_install_app_with_extension_post_method(
 
     assert app_extension.label == label
     assert app_extension.url == url
-    assert app_extension.mount == DeprecatedAppExtensionMount.PRODUCT_OVERVIEW_CREATE
-    assert app_extension.target == DeprecatedAppExtensionTarget.NEW_TAB
+    assert app_extension.mount == "product_overview_create"
+    assert app_extension.target == "new_tab"
     assert list(app_extension.permissions.all()) == [permission_manage_products]
     assert app_extension.http_target_method == "POST"
 
@@ -679,7 +678,9 @@ def test_install_app_with_webhook_incorrect_is_active_value(
 
     error_dict = excinfo.value.error_dict
     assert "webhooks" in error_dict
-    assert error_dict["webhooks"][0].message == "Incorrect value for field: isActive."
+    assert error_dict["webhooks"][0].message == (
+        "Input should be a valid boolean, unable to interpret input"
+    )
 
 
 def test_install_app_webhook_incorrect_query(
@@ -738,7 +739,7 @@ def test_install_app_webhook_incorrect_custom_headers(
     )
 
 
-def test_install_app_lack_of_token_target_url_in_manifest_data(
+def test_install_app_manifest_data_without_token_target_url(
     app_manifest, app_installation, monkeypatch, permission_manage_products
 ):
     # given
@@ -754,13 +755,11 @@ def test_install_app_lack_of_token_target_url_in_manifest_data(
 
     app_installation.permissions.set([permission_manage_products])
 
-    # when & then
-    with pytest.raises(ValidationError) as excinfo:
-        install_app(app_installation, activate=True)
+    # when
+    install_app(app_installation, activate=True)
 
-    error_dict = excinfo.value.error_dict
-    assert "tokenTargetUrl" in error_dict
-    assert error_dict["tokenTargetUrl"][0].message == "Field required."
+    # then
+    assert App.objects.count() == 1
 
 
 @pytest.fixture
